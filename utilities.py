@@ -1,5 +1,9 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import calendar
+calendar.setfirstweekday(6)
+from datetime import datetime
 
 from parameters import *
 
@@ -65,7 +69,7 @@ class FeatureUtil:
             return'Night'
 
     @staticmethod
-    def calc_delay_rate(data:pd.DataFrame,groupby_col:str):
+    def calc_delay_rate(data:pd.DataFrame,groupby_col:str)->pd.DataFrame:
         '''
         Generates delay rate according to given group by column.
         Args:
@@ -74,15 +78,96 @@ class FeatureUtil:
         Returns:
             data(pd.DataFrame): Datarame with delay_rate calculated
         '''
-        res = data.groupby([groupby_col])['delay_15'].agg(['sum','count'])
+        res = data.groupby([groupby_col])[DELAY_15_COLUMN].agg(['sum','count'])
         res[DELAY_RATE_COLUMN] = round((res['sum']/res['count'])*100,2)
         return res
+
+    @staticmethod
+    def encode_other_top_n(data:pd.DataFrame,col:str,threshold:int=1000)->pd.DataFrame:
+        '''
+        Encodes 'other' in categorical column based on threshold.
+        Args:
+            data(pd.DataFrame): Dataframe to be encoded.
+            col (str): Column name for encoding
+            threshold (int): Minimum no of flights recorded.
+        Returns:
+            data(pd.DataFrame): Dataframe with 'other' encoded.
+        '''
+        data.loc[data[col].isin((data[col].value_counts()[data[col].value_counts() < threshold]).index), col] = 'other'
+        return data
+
+    @staticmethod
+    def flag_flight_change(data:pd.DataFrame)->pd.DataFrame:
+        '''
+        Flag column for marking flight number change.
+        Args:
+            data(pd.DataFrame): Dataframe to be encoded.
+        Returns:
+            data(pd.DataFrame): Dataframe with 'flight_number_change' encoded.
+        '''
+        data[FLIGHT_NUMBER_CHANGE_COLUMN] = 0
+        data.loc[data['Emp-I']!=data['Emp-O'],FLIGHT_NUMBER_CHANGE_COLUMN] = 1
+        return data
+
+    @staticmethod
+    def flag_destination_change(data:pd.DataFrame)->pd.DataFrame:
+        '''
+        Flag column for marking destination change.
+        Args:
+            data(pd.DataFrame): Dataframe to be encoded.
+        Returns:
+            data(pd.DataFrame): Dataframe with 'dest_change' encoded.
+        '''
+        data[DEST_CHANGE_COLUMN] = 0
+        data.loc[data['Des-I']!=data['Des-O'],DEST_CHANGE_COLUMN] = 1
+        return data
+
+    @staticmethod
+    def get_week_of_month(dt:datetime.date)->int:
+        '''
+        Calculates week of the month given date.
+        Args:
+            dt(datetime.date): Date.
+        Returns:
+            week_of_month(int): week of the month.
+        '''
+        year, month, day = dt.year, dt.month, dt.day
+        x = np.array(calendar.monthcalendar(year, month))
+        week_of_month = np.where(x==day)[0][0] + 1
+        return week_of_month
+
+    @staticmethod
+    def get_no_of_flights_same_day(data:pd.DataFrame)->pd.DataFrame:
+        '''
+        Calculates no of flights taking off on a given date.
+        Args:
+            data(pd.DataFrame): Dataframe that needs same_day_flight calculated.
+        Returns:
+            merged(pd.DataFrame): Dataframe with same_day_flight calculated.
+        '''
+        data_grpby = data.groupby(['MES','DIA'])['Fecha-I'].agg(['count']).reset_index()
+        merged = data.merge(data_grpby, on=['MES','DIA'])
+        merged.rename(columns={"count": SAME_DAY_FLIGHTS},inplace=True)
+        return merged
+
+    @staticmethod
+    def drop_cols(data:pd.DataFrame,drop_cols:list=[])->pd.DataFrame:
+        '''
+        Drops the given list of columns.
+        Args:
+            data(pd.DataFrame): Dataframe.
+            drop_cols(list): Cols list to drop
+        Returns:
+            data(pd.DataFrame): Dataframe with cols dropped
+        '''
+        return data.drop(columns=drop_cols)
 
 class PlotUtil:
     def __init__(self):
         pass
 
-    def plot_bar_delay_rate(data:pd.DataFrame,groupby_col:str,bar_col:str='count'):
+    @staticmethod
+    def plot_bar_delay_rate(data:pd.DataFrame,groupby_col:str,bar_col:str='count')->object:
         '''
         Generates bar plot with delay rate and count of flights according to given group by column.
         Args:
